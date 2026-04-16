@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    container_name: wf-synth-backend
+    restart: unless-stopped
+    ports:
+      - "8001:8001"   # exposed so you can hit the API directly if needed
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    container_name: wf-synth-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"     # access the app at http://localhost:8080
+    depends_on:
+      backend:
+        condition: service_healthy
+
+# No VITE_API_URL needed — nginx proxies /api to the backend container directly
