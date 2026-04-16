@@ -178,7 +178,7 @@ The dashboard scanner parses:
 | OR groups | `(task="login" OR task="push")` → separate entries |
 | NOT filters | `AND NOT job="telegraf"` → stripped |
 | Nested functions | `aliasSource(taggify(sum(ts(...))))` → drills through |
-| PromQL | `rate(http_requests_total{job="${job}"}[5m])` |
+
 
 ---
 
