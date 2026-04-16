@@ -7,6 +7,11 @@ Built for platform engineers and SREs who need to populate dashboards with reali
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
 ![React 18](https://img.shields.io/badge/react-18-61dafb)
+## Screenshots
+
+![Synthetic Generator](docs/screenshot-generator.png)
+
+![Dashboard Scanner](docs/screenshot-scanner.png)
 
 ---
 
