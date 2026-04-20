@@ -267,13 +267,12 @@ function ResultPanel({ result, error, loading }) {
 
   const stats = [
     ["Points Sent",    result.points_sent?.toLocaleString()],
-    ["Batches",        result.batches],
     ["Metrics",        result.metrics],
     ["Sources",        result.sources],
-    ["Tag Combos",     result.tag_combos],
     ["Time Range",     result.time_range_hours != null ? `${result.time_range_hours}h` : undefined],
-    ["Total Built",    result.total_points_built?.toLocaleString()],
   ].filter(([, v]) => v != null);
+
+  const sourceNames = result.source_names || [];
 
   return (
     <div style={{
@@ -283,7 +282,7 @@ function ResultPanel({ result, error, loading }) {
       <div style={{ color: C.green, fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
         ✓ Data ingested successfully
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 24px" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 24px", marginBottom: 12 }}>
         {stats.map(([label, val]) => (
           <div key={label}>
             <span style={{ fontSize: 11, color: C.muted, display: "block", marginBottom: 2 }}>{label}</span>
@@ -291,23 +290,49 @@ function ResultPanel({ result, error, loading }) {
           </div>
         ))}
       </div>
+      {sourceNames.length > 0 && (
+        <div style={{
+          background: C.accent + "10", border: `1px solid ${C.accent}33`,
+          borderRadius: 6, padding: "10px 12px", fontSize: 12, lineHeight: 1.6,
+        }}>
+          <strong style={{ color: C.accent }}>Next step:</strong> In your dashboard, set the
+          <strong> Host / source dropdown</strong> to one of these values to see the data:
+          <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {sourceNames.map(s => (
+              <span key={s} style={{
+                fontFamily: "monospace", fontSize: 12, background: C.accent + "18",
+                border: `1px solid ${C.accent}44`, borderRadius: 4, padding: "2px 8px",
+                color: C.accent,
+              }}>{s}</span>
+            ))}
+          </div>
+          <div style={{ marginTop: 6, color: C.muted, fontSize: 11 }}>
+            It may take 1–2 minutes for new sources to appear in the dropdown.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function EstimatePanel({ est, ingestion }) {
+const POINT_LIMIT = 50000;
+const POINT_WARN  = 25000;
+
+function EstimatePanel({ est }) {
   if (!est) return null;
-  const pts = est.points_total || 0;
-  const isDirectBlocked = ingestion === "direct" && pts > 50000;
-  const isProxyWarn     = ingestion === "proxy"  && pts > 50000;
+  const pts      = est.points_total || 0;
+  const overLimit = pts > POINT_LIMIT;
+  const overWarn  = pts > POINT_WARN && !overLimit;
+  const color     = overLimit ? C.red : overWarn ? C.amber : C.text;
   return (
     <div style={{ marginTop: 12 }}>
       <div style={{
-        background: C.accent + "12", border: `1px solid ${C.accent}44`,
+        background: overLimit ? C.red + "10" : overWarn ? C.amber + "10" : C.accent + "12",
+        border: `1px solid ${overLimit ? C.red + "55" : overWarn ? C.amber + "55" : C.accent + "44"}`,
         borderRadius: 8, padding: "12px 16px",
-        marginBottom: (isDirectBlocked || isProxyWarn) ? 8 : 0,
+        marginBottom: (overLimit || overWarn) ? 8 : 0,
       }}>
-        <div style={{ color: C.accent, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
+        <div style={{ color: overLimit ? C.red : overWarn ? C.amber : C.accent, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
           ESTIMATE PREVIEW
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 24px" }}>
@@ -319,26 +344,27 @@ function EstimatePanel({ est, ingestion }) {
           ].filter(([,v]) => v != null).map(([l, v]) => (
             <div key={l}>
               <span style={{ fontSize: 11, color: C.muted, display: "block", marginBottom: 2 }}>{l}</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: isDirectBlocked ? C.red : C.text }}>{v}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color }}>{v}</span>
             </div>
           ))}
         </div>
       </div>
-      {isDirectBlocked && (
-        <div style={{
-          background: C.red + "12", border: `1px solid ${C.red}44`, borderRadius: 8,
-          padding: "10px 14px", fontSize: 12, color: C.red, lineHeight: 1.5,
-        }}>
-          ⛔ <strong>Direct ingestion limit:</strong> {pts.toLocaleString()} points exceeds the 50,000 point limit.
-          Reduce metrics, sources, tags, or backfill window — or switch to <strong>Proxy</strong> ingestion.
-        </div>
-      )}
-      {isProxyWarn && (
+      {overWarn && (
         <div style={{
           background: C.amber + "15", border: `1px solid ${C.amber}55`, borderRadius: 8,
           padding: "10px 14px", fontSize: 12, color: C.amber, lineHeight: 1.5,
         }}>
-          ⚠ <strong>Large payload:</strong> {pts.toLocaleString()} points will be sent in chunks with brief pauses every 50,000 points to avoid overwhelming the proxy.
+          ⚠ <strong>{pts.toLocaleString()} points</strong> — this is a large send, consider reducing
+          the backfill window or number of sources.
+        </div>
+      )}
+      {overLimit && (
+        <div style={{
+          background: C.red + "12", border: `1px solid ${C.red}55`, borderRadius: 8,
+          padding: "10px 14px", fontSize: 12, color: C.red, lineHeight: 1.5,
+        }}>
+          🚨 <strong>{pts.toLocaleString()} points</strong> exceeds the {POINT_LIMIT.toLocaleString()} point limit!
+          Reduce metrics, sources, tags or backfill window. You will be asked to confirm twice before sending.
         </div>
       )}
     </div>
@@ -349,31 +375,36 @@ function EstimatePanel({ est, ingestion }) {
 
 function uid() { return Math.random().toString(36).slice(2, 8); }
 
-function SyntheticTab({ sharedAuth, setSharedAuth, sharedMetrics, setSharedMetrics, sharedTags, setSharedTags }) {
+function SyntheticTab({ sharedAuth, setSharedAuth, sharedMetrics, setSharedMetrics, sharedTags, setSharedTags,
+                        sharedSrcMode, setSharedSrcMode, sharedSrcList, setSharedSrcList }) {
   // Metrics + tags — driven by lifted state so Scanner can populate them
   const metrics    = sharedMetrics;
   const setMetrics = setSharedMetrics;
 
   // Sources
-  const [srcMode,  setSrcMode]  = useState("auto");   // "auto" | "manual"
-  const [srcCount, setSrcCount] = useState(3);
-  const [srcList,  setSrcList]  = useState("");
+  // srcMode and srcList are lifted to App so Scanner can pre-fill them
+  const srcMode    = sharedSrcMode;
+  const setSrcMode = setSharedSrcMode;
+  const [srcCount, setSrcCount] = useState(1);
+  const srcList    = sharedSrcList;
+  const setSrcList = setSharedSrcList;
 
   // Tags — driven by lifted state
   const tags    = sharedTags;
   const setTags = setSharedTags;
 
   // Time
-  const [backfillH, setBackfillH] = useState(2);
-  const [backfillM, setBackfillM] = useState(0);
+  const [backfillH, setBackfillH] = useState(0);
+  const [backfillM, setBackfillM] = useState(5);
 
   // State
   const [loading,   setLoading]   = useState(false);
   const [result,    setResult]    = useState(null);
   const [error,     setError]     = useState(null);
   const [estimate,  setEstimate]  = useState(null);
-  const [preview,   setPreview]   = useState(null);   // preview before send
-  const estTimerRef               = useRef(null);
+  const [preview,        setPreview]        = useState(null);
+  const [overLimitWarn,  setOverLimitWarn]  = useState(false); // first confirm for large sends
+  const estTimerRef                         = useRef(null);
 
   // Generate preview: resolve what sources/tags will actually be created
   const buildPreview = () => {
@@ -418,7 +449,13 @@ function SyntheticTab({ sharedAuth, setSharedAuth, sharedMetrics, setSharedMetri
     const payload = {};
 
     // Metrics
-    payload.metrics = metrics.map(m => ({ name: m.name.trim() })).filter(m => m.name);
+    payload.metrics = metrics
+      .map(m => ({
+        name:         m.name.trim(),
+        literalTags:  m.literalTags  || {},
+        variableTags: m.variableTags || [],
+      }))
+      .filter(m => m.name);
 
     // Sources
     if (srcMode === "auto") {
@@ -472,23 +509,40 @@ function SyntheticTab({ sharedAuth, setSharedAuth, sharedMetrics, setSharedMetri
     }, 300);
   };
 
-  const handlePreview = () => {
+  const handlePreview = async () => {
     const p = buildPayload();
     if (!p.metrics?.length) { setError("Add at least one metric name."); return; }
     setError(null);
     setResult(null);
-    setPreview(buildPreview());
+    // Fetch a fresh estimate so the preview always shows accurate point count
+    let freshEstimate = estimate;
+    try {
+      const r = await fetch(`${API}/api/synthetic/estimate`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(p),
+      });
+      const d = await r.json();
+      if (!d.error) { freshEstimate = d; setEstimate(d); }
+    } catch {}
+    setPreview({ ...buildPreview(), estimate: freshEstimate });
   };
 
-  const handleConfirm = async () => {
-    setLoading(true); setResult(null); setError(null); setPreview(null);
+  const handleConfirm = async (force = false) => {
+    setLoading(true); setResult(null); setError(null); setPreview(null); setOverLimitWarn(false);
     try {
-      const p = buildPayload();
+      const p = { ...buildPayload(), force };
+
       const r = await fetch(`${API}/api/synthetic`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(p),
       });
       const d = await r.json();
+      if (d.warning) {
+        // Backend flagged over-limit — show second confirmation
+        setLoading(false);
+        setOverLimitWarn(d);
+        return;
+      }
       if (d.error) setError(d.error);
       else setResult(d);
     } catch (e) { setError(e.message); }
@@ -573,6 +627,7 @@ function SyntheticTab({ sharedAuth, setSharedAuth, sharedMetrics, setSharedMetri
 
         <Card>
           <SectionTitle>Point Tags</SectionTitle>
+
           {tags.length === 0 && (
             <div style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>
               No tags defined — data will be sent with only source= tag.
@@ -619,13 +674,13 @@ function SyntheticTab({ sharedAuth, setSharedAuth, sharedMetrics, setSharedMetri
             </Field>
             <Field label="Minutes">
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <button onClick={() => { const v = Math.max(0, backfillM - 15); setBackfillM(v); triggerEstimate({ backfill_hours: backfillH + v/60 }); }}
+                <button onClick={() => { const v = Math.max(0, backfillM - 5); setBackfillM(v); triggerEstimate({ backfill_hours: backfillH + v/60 }); }}
                   style={{ background: "#f0f2f5", border: `1px solid ${C.border}`, borderRadius: 5,
                     width: 30, height: 36, cursor: "pointer", fontSize: 16, color: C.text, flexShrink: 0 }}>−</button>
                 <Input type="number" min={0} max={59} value={backfillM}
                   onChange={e => { const v = Math.min(59, Math.max(0, parseInt(e.target.value) || 0)); setBackfillM(v); triggerEstimate({ backfill_hours: backfillH + v/60 }); }}
                   style={{ textAlign: "center" }} />
-                <button onClick={() => { const v = Math.min(59, backfillM + 15); setBackfillM(v); triggerEstimate({ backfill_hours: backfillH + v/60 }); }}
+                <button onClick={() => { const v = Math.min(55, backfillM + 5); setBackfillM(v); triggerEstimate({ backfill_hours: backfillH + v/60 }); }}
                   style={{ background: "#f0f2f5", border: `1px solid ${C.border}`, borderRadius: 5,
                     width: 30, height: 36, cursor: "pointer", fontSize: 16, color: C.text, flexShrink: 0 }}>+</button>
               </div>
@@ -637,7 +692,7 @@ function SyntheticTab({ sharedAuth, setSharedAuth, sharedMetrics, setSharedMetri
               {backfillH >= 24 ? ` (${(backfillH / 24).toFixed(1)} days)` : ""}
             </div>
           )}
-          <EstimatePanel est={estimate} ingestion={sharedAuth.ingestion} />
+          <EstimatePanel est={estimate} />
         </Card>
 
         <AuthCard auth={sharedAuth} setAuth={setSharedAuth} />
@@ -731,11 +786,47 @@ function SyntheticTab({ sharedAuth, setSharedAuth, sharedMetrics, setSharedMetri
               )}
 
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <Btn onClick={handleConfirm} disabled={loading}
+                <Btn onClick={() => handleConfirm(false)} disabled={loading}
                   style={{ flex: 1, padding: "10px 0", fontSize: 13 }}>
                   {loading ? "Sending…" : "⚡  Confirm & Send"}
                 </Btn>
                 <Btn variant="ghost" onClick={() => setPreview(null)}
+                  style={{ padding: "10px 18px", fontSize: 13 }}>
+                  Cancel
+                </Btn>
+              </div>
+            </div>
+          )}
+
+          {/* Over-limit double-confirmation dialog */}
+          {overLimitWarn && !preview && (
+            <div style={{
+              background: "#fff", border: `2px solid ${C.amber}`,
+              borderRadius: 10, padding: "18px 20px",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
+            }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: C.amber, marginBottom: 8 }}>
+                ⚠ Large send — are you sure?
+              </div>
+              <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6, marginBottom: 14 }}>
+                You are about to send{" "}
+                <strong style={{ color: C.amber }}>
+                  {overLimitWarn.points_would_send?.toLocaleString()} points
+                </strong>
+                {" "}which exceeds the {(overLimitWarn.limit || 50000).toLocaleString()} point guideline.
+                <br/>This may take some time and put load on your environment.
+                <br/><strong>Click "Yes, send anyway" to proceed.</strong>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn
+                  variant="danger"
+                  onClick={() => handleConfirm(true)}
+                  disabled={loading}
+                  style={{ flex: 1, padding: "10px 0", fontSize: 13 }}
+                >
+                  {loading ? "Sending…" : "Yes, send anyway"}
+                </Btn>
+                <Btn variant="ghost" onClick={() => setOverLimitWarn(false)}
                   style={{ padding: "10px 18px", fontSize: 13 }}>
                   Cancel
                 </Btn>
@@ -832,7 +923,8 @@ function AuthCard({ auth, setAuth }) {
 
 // ── Tab 2: Dashboard Scanner ─────────────────────────────────────────────────
 
-function ScanTab({ sharedAuth, setSharedAuth, setSharedMetrics, setSharedTags, setTab }) {
+function ScanTab({ sharedAuth, setSharedAuth, setSharedMetrics, setSharedTags,
+                  setSharedSrcMode, setSharedSrcList, setTab }) {
   const [slug,      setSlug]      = useState("");
   const [loading,   setLoading]   = useState(false);
   const [result,    setResult]    = useState(null);
@@ -843,34 +935,37 @@ function ScanTab({ sharedAuth, setSharedAuth, setSharedMetrics, setSharedTags, s
 
   // Build deduplicated metric list and extract literal point tags for the generator
   const buildTransferData = (entries) => {
-    const seenNames = new Set();
-    const metrics   = [];
-    // Collect all literal tag keys → set of values across all metrics
-    const tagMap    = {};  // key → Set of values
+    const metrics = (entries || [])
+      .filter(e => e.name)
+      .map(e => ({
+        id:           uid(),
+        name:         e.name,
+        literalTags:  e.literalTags  || {},
+        variableTags: e.variableTags || [],
+      }));
 
-    for (const entry of (entries || [])) {
-      const name = entry.name;
-      if (!name || seenNames.has(name)) {
-        // Still collect tags from duplicate metric names
-      } else {
-        seenNames.add(name);
-        metrics.push({ id: uid(), name });
-      }
-      // Accumulate literal tag values across all entries
-      for (const [k, v] of Object.entries(entry.literalTags || {})) {
-        if (!tagMap[k]) tagMap[k] = new Set();
-        tagMap[k].add(v);
+    // Collect tag keys from all metric entries so user can see/edit them.
+    // These are sent per-metric by the backend, not applied globally to all metrics.
+    const varKeys = new Set();
+    const litMap  = {};
+
+    for (const e of (entries || [])) {
+      for (const k of (e.variableTags || [])) varKeys.add(k);
+      for (const [k, v] of Object.entries(e.literalTags || {})) {
+        if (!varKeys.has(k)) {
+          if (!litMap[k]) litMap[k] = new Set();
+          litMap[k].add(v);
+        }
       }
     }
+    for (const k of varKeys) delete litMap[k];
 
-    // Convert tagMap to tag rows for the generator
-    const tags = Object.entries(tagMap).map(([key, valSet]) => ({
-      id:     uid(),
-      key,
-      mode:   "manual",
-      count:  2,
-      values: [...valSet].join(", "),
-    }));
+    const tags = [
+      ...[...varKeys].map(k => ({ id: uid(), key: k, mode: "auto", count: 2, values: "" })),
+      ...Object.entries(litMap).map(([k, valSet]) => ({
+        id: uid(), key: k, mode: "manual", count: 2, values: [...valSet].join(", "),
+      })),
+    ];
 
     return { metrics, tags };
   };
@@ -880,6 +975,13 @@ function ScanTab({ sharedAuth, setSharedAuth, setSharedMetrics, setSharedTags, s
     const { metrics, tags } = buildTransferData(result.entries || []);
     setSharedMetrics(metrics);
     setSharedTags(tags);
+    // Pre-fill sources from the dashboard's SOURCE parameter defaults
+    // so synthetic data lands on the right source name (e.g. "lx" not "synthetic-source-1234")
+    const suggested = result.suggested_sources || [];
+    if (suggested.length > 0) {
+      setSharedSrcMode("manual");
+      setSharedSrcList(suggested.join(", "));
+    }
     setTab("synthetic");
   };
 
@@ -1023,6 +1125,35 @@ function ScanTab({ sharedAuth, setSharedAuth, setSharedMetrics, setSharedTags, s
                 ))
               )}
             </div>
+
+            {/* Wildcard patterns warning */}
+            {result.wildcard_patterns?.length > 0 && (
+              <div style={{
+                marginTop: 12,
+                background: C.amber + "12", border: `1px solid ${C.amber}55`,
+                borderRadius: 8, padding: "12px 14px",
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: C.amber, marginBottom: 6 }}>
+                  ⚠ {result.wildcard_patterns.length} wildcard pattern{result.wildcard_patterns.length !== 1 ? "s" : ""} skipped
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.6, marginBottom: 8 }}>
+                  These charts use wildcard queries like <code>ts("mem.*")</code>. The exact metric names
+                  depend on your Telegraf/agent config and cannot be inferred automatically.
+                  Add the specific metrics you need to the Generator manually.
+                </div>
+                {result.wildcard_patterns.map((p, i) => (
+                  <div key={i} style={{
+                    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                    fontSize: 11, color: C.amber,
+                    padding: "3px 8px", marginBottom: 3,
+                    background: C.amber + "10", borderRadius: 4,
+                    display: "inline-block", marginRight: 6,
+                  }}>
+                    {p}
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         ) : (
           <Card style={{ display: "flex", alignItems: "center", justifyContent: "center",
@@ -1065,8 +1196,10 @@ export default function App() {
     });
   };
 
-  // Shared metrics + tags — lifted so Scanner can populate Generator
+  // Shared metrics, tags, and source settings — lifted so Scanner can pre-fill Generator
   const [sharedMetrics, setSharedMetrics] = useState([{ id: uid(), name: "" }]);
+  const [sharedSrcMode, setSharedSrcMode] = useState("auto");
+  const [sharedSrcList, setSharedSrcList] = useState("");
   const [sharedTags,    setSharedTags]    = useState([]);
 
   const tabs = [
@@ -1138,9 +1271,13 @@ export default function App() {
         {tab === "synthetic"
           ? <SyntheticTab sharedAuth={sharedAuth} setSharedAuth={updateAuth}
                           sharedMetrics={sharedMetrics} setSharedMetrics={setSharedMetrics}
-                          sharedTags={sharedTags} setSharedTags={setSharedTags} />
+                          sharedTags={sharedTags} setSharedTags={setSharedTags}
+                          sharedSrcMode={sharedSrcMode} setSharedSrcMode={setSharedSrcMode}
+                          sharedSrcList={sharedSrcList} setSharedSrcList={setSharedSrcList} />
           : <ScanTab      sharedAuth={sharedAuth} setSharedAuth={updateAuth}
-                          setSharedMetrics={setSharedMetrics} setSharedTags={setSharedTags} setTab={setTab} />
+                          setSharedMetrics={setSharedMetrics} setSharedTags={setSharedTags}
+                          setSharedSrcMode={setSharedSrcMode} setSharedSrcList={setSharedSrcList}
+                          setTab={setTab} />
         }
       </div>
     </>
