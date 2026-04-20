@@ -1,6 +1,6 @@
 # Wavefront Synthetic Metric Generator
 
-A lightweight web tool for generating and ingesting synthetic metric data into **VMware Aria Operations for Applications** (formerly Tanzu Observability / Wavefront / DX OpenExplore).
+A lightweight web tool for generating and ingesting synthetic metric data into **Wavefront / DX OpenExplore** (formerly Tanzu Observability).
 
 Built for platform engineers and SREs who need to populate dashboards with realistic-looking data before real metrics arrive — useful for demos, dashboard development, and testing alert thresholds.
 
